@@ -192,7 +192,7 @@ class AddRecordDialog : DialogFragment() {
 
                 val prefMerchant = args.getString("merchant") ?: ""
                 val prefSource = args.getString("source") ?: ""
-                binding.etNote.setText(if (fromNotif) "$prefSource: $prefMerchant" else prefMerchant)
+                binding.etNote.setText(if (prefMerchant.isNotBlank()) prefMerchant else prefSource)
 
                 val prefCategory = args.getString("category") ?: ""
                 addTxCategory = prefCategory

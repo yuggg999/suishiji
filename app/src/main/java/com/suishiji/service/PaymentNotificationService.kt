@@ -215,7 +215,7 @@ class PaymentNotificationService : AccessibilityService() {
                         amount = data.amount,
                         type = data.type,
                         category = data.category,
-                        note = "${data.source}: ${data.merchant}",
+                        note = if (data.merchant.isNotBlank()) data.merchant else data.source,
                         date = data.date,
                         latitude = data.latitude,
                         longitude = data.longitude,
