@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.suishiji.ui.HomeFragment"
+        android:label="首页" />
+
+    <fragment
+        android:id="@+id/categoryFragment"
+        android:name="com.suishiji.ui.CategoryFragment"
+        android:label="分类汇总" />
+</navigation>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary palette -->
+    <color name="primary">#007AFF</color>
+    <color name="primary_dark">#0060CC</color>
+    <color name="primary_light">#E5F0FF</color>
+    <color name="accent">#007AFF</color>
+    <color name="accent_light">#E5F0FF</color>
+    <color name="background">#F2F2F7</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="card_bg_alt">#F2F2F7</color>
+    <color name="border">#E5E5EA</color>
+
+    <!-- Text -->
+    <color name="text_primary">#1C1C1E</color>
+    <color name="text_secondary">#636366</color>
+    <color name="text_disabled">#AEAEB2</color>
+    <color name="segment_unselected">#8E8E93</color>
+
+    <!-- Finance -->
+    <color name="expense">#FF3B30</color>
+    <color name="expense_light">#FFEBEE</color>
+    <color name="income">#34C759</color>
+    <color name="income_light">#E8F8F0</color>
+    <color name="refund">#007AFF</color>
+
+    <!-- Chip -->
+    <color name="chip_selected_bg">#007AFF</color>
+    <color name="chip_selected_stroke">#007AFF</color>
+    <color name="chip_bg">#F2F2F7</color>
+
+    <!-- UI -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="overlay">#80000000</color>
+
+    <color name="bottom_nav_color">@color/bottom_nav_selector</color>
+
+    <!-- Calendar -->
+    <color name="calendar_today">#007AFF</color>
+    <color name="calendar_selected">#007AFF</color>
+    <color name="calendar_birthday">#FFF3E0</color>
+    <color name="calendar_dot_high">#FF3B30</color>
+    <color name="calendar_dot_low">#34C759</color>
+</resources>

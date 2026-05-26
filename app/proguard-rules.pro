@@ -1,0 +1,5 @@
+-keepattributes *Annotation*
+-keep class com.suishiji.db.** { *; }
+-keep class com.suishiji.service.** { *; }
+-keep class com.amap.api.location.** { *; }
+-keep class com.amap.api.fused.** { *; }

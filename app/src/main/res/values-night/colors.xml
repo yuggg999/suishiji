@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Mode Colors -->
+    <color name="primary">#0A84FF</color>
+    <color name="primary_dark">#0066DD</color>
+    <color name="background">#000000</color>
+    <color name="card_bg">#1C1C1E</color>
+    <color name="card_bg_alt">#2C2C2E</color>
+    <color name="border">#38383A</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#EBEBF5</color>
+    <color name="text_disabled">#8E8E93</color>
+
+    <!-- Finance -->
+    <color name="expense">#FF453A</color>
+    <color name="income">#30D158</color>
+
+    <!-- Chip -->
+    <color name="chip_selected_bg">#1A3A5C</color>
+    <color name="chip_selected_stroke">#0A84FF</color>
+
+    <!-- UI -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+
+    <color name="bottom_nav_color">@color/bottom_nav_selector</color>
+</resources>
