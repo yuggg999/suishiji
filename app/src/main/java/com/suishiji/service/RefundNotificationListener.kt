@@ -96,20 +96,41 @@ class RefundNotificationListener : NotificationListenerService() {
     }
 
     private fun extractAmount(text: String): String? {
-        // 优先匹配带 ¥￥ 符号的金额
+        val discountKw = setOf("优惠", "红包", "立减", "折扣", "已省", "已优惠")
+        val paymentKw = setOf("实付", "实际", "付款金额", "合计", "共", "总计", "交易金额", "金额")
         val symbolRegex = Regex("""[¥￥]\s*(\d+\.?\d*)""")
-        val symbolMatch = symbolRegex.find(text)
-        if (symbolMatch != null) {
-            val amount = symbolMatch.groupValues[1]
-            if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+        val yuanRegex = Regex("""(\d+\.?\d*)\s*元""")
+
+        // 优先支付关键词附近的金额（实付、合计等）
+        if (paymentKw.any { text.contains(it) }) {
+            val symbolMatch = symbolRegex.find(text)
+            if (symbolMatch != null) {
+                val amount = symbolMatch.groupValues[1]
+                if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+            }
+            val yuanMatch = yuanRegex.find(text)
+            if (yuanMatch != null) {
+                val amount = yuanMatch.groupValues[1]
+                if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+            }
         }
 
-        // 其次匹配带 元 字的金额
-        val yuanRegex = Regex("""(\d+\.?\d*)\s*元""")
-        val yuanMatch = yuanRegex.find(text)
-        if (yuanMatch != null) {
-            val amount = yuanMatch.groupValues[1]
-            if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+        // 排除折扣关键词后匹配 ¥￥ 金额
+        if (!discountKw.any { text.contains(it) }) {
+            val symbolMatch = symbolRegex.find(text)
+            if (symbolMatch != null) {
+                val amount = symbolMatch.groupValues[1]
+                if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+            }
+        }
+
+        // 排除折扣关键词后匹配 元 金额
+        if (!discountKw.any { text.contains(it) }) {
+            val yuanMatch = yuanRegex.find(text)
+            if (yuanMatch != null) {
+                val amount = yuanMatch.groupValues[1]
+                if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+            }
         }
 
         return null

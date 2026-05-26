@@ -234,38 +234,57 @@ class PaymentNotificationService : AccessibilityService() {
     // ==================== 金额提取 ====================
 
     private fun extractAmount(texts: List<String>): String? {
-        // 优先匹配带 ¥￥ 符号的金额
+        val discountKw = setOf("优惠", "红包", "立减", "折扣", "已省", "已优惠", "减")
+        val paymentKw = setOf("实付", "实际", "付款金额", "合计", "共", "总计", "交易金额", "金额")
         val symbolRegex = Regex("""[¥￥]\s*(\d+\.?\d*)""")
-        for (text in texts) {
-            val match = symbolRegex.find(text)
-            if (match != null) {
-                val amount = match.groupValues[1]
-                if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) {
-                    return amount
-                }
-            }
-        }
-
-        // 其次匹配带 元 字的金额
         val yuanRegex = Regex("""(\d+\.?\d*)\s*元""")
+
+        // 1. 优先匹配含支付关键词的文本中的金额（实付、合计等 -> 最终实付金额）
         for (text in texts) {
-            val match = yuanRegex.find(text)
-            if (match != null) {
-                val amount = match.groupValues[1]
-                if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) {
-                    return amount
+            if (paymentKw.any { text.contains(it) }) {
+                val match = symbolRegex.find(text)
+                if (match != null) {
+                    val amount = match.groupValues[1]
+                    if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+                }
+                val yuanMatch = yuanRegex.find(text)
+                if (yuanMatch != null) {
+                    val amount = yuanMatch.groupValues[1]
+                    if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
                 }
             }
         }
 
-        // 最后匹配纯数字金额（排除手机号等）
+        // 2. 其次匹配不含折扣关键词的 ¥￥ 金额
+        for (text in texts) {
+            if (!discountKw.any { text.contains(it) }) {
+                val match = symbolRegex.find(text)
+                if (match != null) {
+                    val amount = match.groupValues[1]
+                    if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+                }
+            }
+        }
+
+        // 3. 匹配不含折扣关键词的 元 金额
+        for (text in texts) {
+            if (!discountKw.any { text.contains(it) }) {
+                val match = yuanRegex.find(text)
+                if (match != null) {
+                    val amount = match.groupValues[1]
+                    if (amount.toDoubleOrNull() != null && amount.toDouble() > 0) return amount
+                }
+            }
+        }
+
+        // 4. 最后匹配纯数字金额（排除手机号等）
         val pureRegex = Regex("""\b(\d+\.?\d*)\b""")
         for (text in texts) {
             val match = pureRegex.find(text)
             if (match != null) {
                 val amount = match.groupValues[1]
                 val amountDouble = amount.toDoubleOrNull()
-                // 排除：手机号（11位）、过大金额（>10000）、过小金额（<0.01）
+                // 排除：手机号（11位）、过大金额（>10000）、过小金额（<0.01）、含折扣关键词的文本
                 if (amountDouble != null && amountDouble > 0.01 && amountDouble < 10000 && amount.length <= 8) {
                     return amount
                 }
@@ -279,7 +298,8 @@ class PaymentNotificationService : AccessibilityService() {
 
     private fun extractMerchant(texts: List<String>): String? {
         val exclude = setOf("支付成功", "支付完成", "已支付", "确认收货", "查看账单",
-            "完成", "返回", "微信支付", "支付宝", "交易", "账单", "详情", "付款成功")
+            "完成", "返回", "微信支付", "支付宝", "交易", "账单", "详情", "付款成功",
+            "优惠", "红包", "立减", "折扣", "已省", "已优惠")
         for (text in texts) {
             val cleaned = text.trim()
             if (cleaned.length in 2..20
