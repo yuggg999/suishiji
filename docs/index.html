@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随时记 · 文档</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0d0e;
+  --bg-card: #121518;
+  --bg-hover: #1a1f23;
+  --border: #1e252a;
+  --gold: #f0b429;
+  --gold-dim: #a67c1e;
+  --gold-glow: rgba(240, 180, 41, 0.08);
+  --text: #e8e6e1;
+  --text-dim: #8a8883;
+  --text-muted: #5c5a55;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ─── Noise overlay ─── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ─── Grain dots ─── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, var(--gold-glow) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 20% 80%, rgba(240,180,41,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 80% 60%, rgba(240,180,41,0.02) 0%, transparent 50%);
+}
+
+/* ─── Nav ─── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 0 2rem;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  background: rgba(11, 13, 14, 0.75);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-logo {
+  font-family: 'DM Mono', monospace;
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--gold);
+  letter-spacing: 0.05em;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+}
+
+.nav-links a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  transition: color 0.2s;
+  position: relative;
+}
+
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px; left: 0;
+  width: 0; height: 1px;
+  background: var(--gold);
+  transition: width 0.3s;
+}
+
+.nav-links a:hover { color: var(--text); }
+.nav-links a:hover::after { width: 100%; }
+
+.nav-github {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.nav-github:hover {
+  border-color: var(--gold-dim);
+  color: var(--gold);
+}
+
+/* ─── Hero ─── */
+.hero {
+  min-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 2rem;
+  position: relative;
+}
+
+.hero-tag {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: rgba(240, 180, 41, 0.08);
+  padding: 0.35rem 1rem;
+  border-radius: 100px;
+  border: 1px solid rgba(240, 180, 41, 0.15);
+  margin-bottom: 2.5rem;
+  animation: fadeUp 0.8s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero h1 {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 900;
+  font-size: clamp(3rem, 8vw, 6rem);
+  color: var(--text);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  animation: fadeUp 0.8s 0.1s ease both;
+}
+
+.hero h1 .gold {
+  color: var(--gold);
+  position: relative;
+}
+
+.hero p {
+  max-width: 520px;
+  margin-top: 1.5rem;
+  font-size: 1rem;
+  color: var(--text-dim);
+  animation: fadeUp 0.8s 0.2s ease both;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  animation: fadeUp 0.8s 0.3s ease both;
+}
+
+.btn {
+  font-family: 'Noto Sans SC', sans-serif;
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding: 0.7rem 1.6rem;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.25s;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--gold);
+  color: #0b0d0e;
+  border: none;
+}
+
+.btn-primary:hover {
+  background: #f5c542;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(240, 180, 41, 0.2);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-outline:hover {
+  border-color: var(--text-dim);
+  background: rgba(255,255,255,0.03);
+}
+
+/* ─── Scroll indicator ─── */
+.scroll-indicator {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(6px); }
+}
+
+.scroll-indicator .line {
+  width: 1px; height: 32px;
+  background: linear-gradient(to bottom, var(--text-muted), transparent);
+}
+
+/* ─── Section ─── */
+section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 5rem 2rem;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.section-header h2 {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 700;
+  font-size: 2rem;
+  color: var(--text);
+}
+
+.section-header .subtitle {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 0.75rem;
+}
+
+.section-header p {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  margin-top: 0.75rem;
+}
+
+/* ─── Card grid ─── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.75rem;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.card:hover {
+  background: var(--bg-hover);
+  border-color: rgba(240, 180, 41, 0.2);
+  transform: translateY(-3px);
+}
+
+.card:hover::before { opacity: 1; }
+
+.card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(240, 180, 41, 0.06);
+  border: 1px solid rgba(240, 180, 41, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  margin-bottom: 1.25rem;
+}
+
+.card h3 {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 0.5rem;
+}
+
+.card p {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.card .arrow {
+  display: inline-block;
+  margin-top: 1rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--gold);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: all 0.3s;
+}
+
+.card:hover .arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ─── Features table ─── */
+.features-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.feature-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.feature-row:hover {
+  background: var(--bg-hover);
+  border-color: rgba(240, 180, 41, 0.12);
+}
+
+.feature-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.feature-row .name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.feature-row .desc {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  flex: 2;
+}
+
+.feature-row .status {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.status-done {
+  background: rgba(76, 175, 80, 0.1);
+  color: #66bb6a;
+  border: 1px solid rgba(76, 175, 80, 0.15);
+}
+
+.status-plan {
+  background: rgba(240, 180, 41, 0.08);
+  color: var(--gold);
+  border: 1px solid rgba(240, 180, 41, 0.12);
+}
+
+/* ─── Roadmap ─── */
+.roadmap-timeline {
+  position: relative;
+  padding-left: 2rem;
+}
+
+.roadmap-timeline::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0.5rem; bottom: 0.5rem;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--gold-dim), transparent);
+}
+
+.roadmap-item {
+  position: relative;
+  padding: 0 0 2.5rem 1.5rem;
+}
+
+.roadmap-item::before {
+  content: '';
+  position: absolute;
+  left: -2.4rem;
+  top: 0.4rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 2px var(--gold-dim);
+}
+
+.roadmap-item.done::before {
+  background: #66bb6a;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.4);
+}
+
+.roadmap-item .version {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--gold);
+  margin-bottom: 0.3rem;
+}
+
+.roadmap-item.done .version { color: #66bb6a; }
+
+.roadmap-item h4 {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.roadmap-item p {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.roadmap-item ul {
+  margin-top: 0.5rem;
+  padding-left: 1.2rem;
+  list-style: none;
+}
+
+.roadmap-item li {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  padding: 0.15rem 0;
+  position: relative;
+}
+
+.roadmap-item li::before {
+  content: '';
+  position: absolute;
+  left: -1rem;
+  top: 0.55rem;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.roadmap-item li.done::before {
+  background: #66bb6a;
+}
+
+.roadmap-item li.done {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* ─── Footer ─── */
+footer {
+  text-align: center;
+  padding: 3rem 2rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+footer a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  nav { padding: 0 1rem; }
+  .nav-links { display: none; }
+  .card-grid { grid-template-columns: 1fr; }
+  .feature-row { flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+  .feature-row .desc { flex: none; }
+  section { padding: 3rem 1rem; }
+}
+
+@media (max-width: 480px) {
+  .hero-actions { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/suishiji/" class="nav-logo">~/随时记</a>
+  <ul class="nav-links">
+    <li><a href="#features">功能</a></li>
+    <li><a href="#roadmap">路线图</a></li>
+    <li><a href="#docs">文档</a></li>
+  </ul>
+  <a href="https://github.com/yuggg999/suishiji" class="nav-github" target="_blank">GitHub</a>
+</nav>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+  <div class="hero-tag">v2.1.5 · 自动记账</div>
+  <h1>
+    <span class="gold">随</span>时记
+  </h1>
+  <p>自动识别微信 / 支付宝支付成功页面，<br>自动记账的个人理财助手。</p>
+  <div class="hero-actions">
+    <a href="https://github.com/yuggg999/suishiji/releases" class="btn btn-primary" target="_blank">下载 APK</a>
+    <a href="#features" class="btn btn-outline">查看功能</a>
+  </div>
+  <div class="scroll-indicator">
+    <span>向下滚动</span>
+    <div class="line"></div>
+  </div>
+</section>
+
+<!-- ═══ FEATURES ═══ -->
+<section id="features">
+  <div class="section-header">
+    <span class="subtitle">Features</span>
+    <h2>功能状态</h2>
+    <p>随时记当前已实现的功能一览</p>
+  </div>
+
+  <div class="features-list">
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">⚡</div>
+      <span class="name">微信/支付宝支付识别</span>
+      <span class="desc">无障碍服务自动检测支付成功页面</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">💰</div>
+      <span class="name">金额智能提取</span>
+      <span class="desc">支持优惠/红包排除，优先实付金额</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">🏷️</div>
+      <span class="name">自动分类</span>
+      <span class="desc">商户名匹配关键词自动归类，支持自定义</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(76,175,80,0.08);color:#66bb6a">📍</div>
+      <span class="name">位置记录</span>
+      <span class="desc">高德地图 SDK，每笔交易记录地理信息</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">📊</div>
+      <span class="name">统计图表</span>
+      <span class="desc">月度日历、分类饼图/条形图、排行</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">🔄</div>
+      <span class="name">退款识别</span>
+      <span class="desc">自动识别支付宝/微信退款并记录</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">🌙</div>
+      <span class="name">深色模式</span>
+      <span class="desc">支持明暗主题切换</span>
+      <span class="status status-done">完成</span>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon" style="background:rgba(240,180,41,0.08);color:var(--gold)">📅</div>
+      <span class="name">固定支出 & 预算</span>
+      <span class="desc">管理月租订阅，月度预算实时跟踪</span>
+      <span class="status status-done">完成</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ ROADMAP ═══ -->
+<section id="roadmap">
+  <div class="section-header">
+    <span class="subtitle">Roadmap</span>
+    <h2>路线图</h2>
+    <p>项目的发展规划与未来方向</p>
+  </div>
+
+  <div class="roadmap-timeline">
+    <div class="roadmap-item done">
+      <div class="version">v2.1.5 · 当前</div>
+      <h4>分类优化 & 智能金额</h4>
+      <p>关键词扩增、优惠/红包排除、备注优化</p>
+      <ul>
+        <li class="done">扩充分类关键词库</li>
+        <li class="done">金额识别支持支付优惠/红包</li>
+        <li class="done">商户名直接作为备注</li>
+      </ul>
+    </div>
+
+    <div class="roadmap-item">
+      <div class="version">v2.1.6 · 计划</div>
+      <h4>智能匹配 & 新分类</h4>
+      <ul>
+        <li>多关键词命中时智能选择最佳匹配</li>
+        <li>金额计算（原价 - 优惠 = 实付）</li>
+        <li>新增"医疗"分类</li>
+      </ul>
+    </div>
+
+    <div class="roadmap-item">
+      <div class="version">v2.2 · 规划</div>
+      <h4>智能记账</h4>
+      <ul>
+        <li>月度消费趋势图表</li>
+        <li>消费异常提醒</li>
+        <li>商户频次统计</li>
+        <li>智能预算建议</li>
+      </ul>
+    </div>
+
+    <div class="roadmap-item">
+      <div class="version">v2.3 · 规划</div>
+      <h4>数据分析</h4>
+      <ul>
+        <li>年度消费报告</li>
+        <li>分类对比分析</li>
+        <li>支出预测</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ DOCS ═══ -->
+<section id="docs">
+  <div class="section-header">
+    <span class="subtitle">Documentation</span>
+    <h2>详细文档</h2>
+    <p>深入了解随时记的设计、开发与使用</p>
+  </div>
+
+  <div class="card-grid">
+    <a href="Features" class="card">
+      <div class="card-icon">📋</div>
+      <h3>功能状态</h3>
+      <p>所有功能的完整列表，已实现与规划中。</p>
+      <span class="arrow">→</span>
+    </a>
+    <a href="Roadmap" class="card">
+      <div class="card-icon">🗺️</div>
+      <h3>路线图</h3>
+      <p>从 v2.1.5 到长期规划的完整路线。</p>
+      <span class="arrow">→</span>
+    </a>
+    <a href="Auto-Classification" class="card">
+      <div class="card-icon">🏷️</div>
+      <h3>自动分类</h3>
+      <p>分类关键词列表与金额提取规则详解。</p>
+      <span class="arrow">→</span>
+    </a>
+    <a href="Architecture" class="card">
+      <div class="card-icon">🏗️</div>
+      <h3>项目架构</h3>
+      <p>技术栈、目录结构、数据流、数据库设计。</p>
+      <span class="arrow">→</span>
+    </a>
+    <a href="Development" class="card">
+      <div class="card-icon">🛠️</div>
+      <h3>开发指南</h3>
+      <p>构建、调试、数据库查看、贡献指南。</p>
+      <span class="arrow">→</span>
+    </a>
+    <a href="https://github.com/yuggg999/suishiji" class="card" target="_blank">
+      <div class="card-icon">💻</div>
+      <h3>源代码</h3>
+      <p>查看 GitHub 仓库，提交 Issue 或 PR。</p>
+      <span class="arrow">→</span>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <p><a href="https://github.com/yuggg999/suishiji">随时记</a> · 以 Kotlin 构建 · Apache-2.0</p>
+</footer>
+
+<script>
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const el = document.querySelector(a.getAttribute('href'));
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  });
+});
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) e.target.style.animationPlayState = 'running';
+  });
+}, { threshold: 0.1 });
+document.querySelectorAll('.card, .feature-row, .roadmap-item').forEach(el => {
+  el.style.animation = 'fadeUp 0.6s ease both';
+  el.style.animationPlayState = 'paused';
+  observer.observe(el);
+});
+</script>
+</body>
+</html>
