@@ -412,10 +412,14 @@ class AddRecordDialog : DialogFragment() {
                     binding.tvLocation.setOnClickListener { fetchLocationGps() }
                 }
                 AppLocationManager.searchPoi(requireContext(), result.latitude, result.longitude) { poiName ->
-                    if (poiName != null && isAdded) {
+                    if (poiName != null) {
                         addTxAddr = poiName
-                        val accText = if (result.accuracy > 0) " (${result.accuracy.toInt()}米)" else ""
-                        binding.tvLocation.text = "GPS已定位$accText: $poiName"
+                        binding.root.post {
+                            if (isAdded) {
+                                val accText = if (result.accuracy > 0) " (${result.accuracy.toInt()}米)" else ""
+                                binding.tvLocation.text = "GPS已定位$accText: $poiName"
+                            }
+                        }
                     }
                 }
             }
@@ -429,10 +433,14 @@ class AddRecordDialog : DialogFragment() {
                     binding.tvLocation.text = if (addrText.isNullOrBlank()) "GPS已定位$accText" else "GPS已定位$accText: $addrText"
                 }
                 AppLocationManager.searchPoi(requireContext(), result.latitude, result.longitude) { poiName ->
-                    if (poiName != null && isAdded) {
+                    if (poiName != null) {
                         addTxAddr = poiName
-                        val accText = if (result.accuracy > 0) " (${result.accuracy.toInt()}米)" else ""
-                        binding.tvLocation.text = "GPS已定位$accText: $poiName"
+                        binding.root.post {
+                            if (isAdded) {
+                                val accText = if (result.accuracy > 0) " (${result.accuracy.toInt()}米)" else ""
+                                binding.tvLocation.text = "GPS已定位$accText: $poiName"
+                            }
+                        }
                     }
                 }
             }
