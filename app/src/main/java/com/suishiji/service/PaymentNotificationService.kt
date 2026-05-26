@@ -104,6 +104,7 @@ class PaymentNotificationService : AccessibilityService() {
         val isPaySuccess = pageText.contains("支付成功") || pageText.contains("支付完成") ||
                 pageText.contains("付款成功") || pageText.contains("已支付") ||
                 pageText.contains("交易完成") ||
+                (pageText.contains("待") && pageText.contains("确认收款")) ||
                 pageText.contains("转账成功") || pageText.contains("已转账") ||
                 pageText.contains("对方已收款")
         if (!isPaySuccess) return
@@ -303,7 +304,7 @@ class PaymentNotificationService : AccessibilityService() {
         val exclude = setOf("支付成功", "支付完成", "已支付", "确认收货", "查看账单",
             "完成", "返回", "微信支付", "支付宝", "交易", "账单", "详情", "付款成功",
             "优惠", "红包", "立减", "折扣", "已省", "已优惠",
-            "转账成功", "已转账", "对方已收款")
+            "转账成功", "已转账", "对方已收款", "确认收款")
         for (text in texts) {
             val cleaned = text.trim()
             if (cleaned.length in 2..20
