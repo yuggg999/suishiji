@@ -339,18 +339,8 @@ class PaymentNotificationService : AccessibilityService() {
         val text = "$typeStr ${amountStr}元 · $merchant"
 
         val category = if (isIncome) "其它收入" else "其它"
-        pendingConfirmData = ConfirmData(
-            amountStr = amountStr,
-            amount = amountStr.toDoubleOrNull() ?: 0.0,
-            merchant = merchant,
-            source = source,
-            type = type,
-            category = category,
-            date = date,
-            latitude = null,
-            longitude = null,
-            address = null
-        )
+        // 不设置 pendingConfirmData，避免覆盖首次事件的自动保存数据
+        // 用户点击通知后走 MainActivity → AddRecordDialog，不会自动保存
 
         val saveIntent = Intent(applicationContext, MainActivity::class.java).apply {
             putExtra("from_notification", true)
