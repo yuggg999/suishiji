@@ -93,7 +93,7 @@ class NotifyReceiver : BroadcastReceiver() {
     }
 
     private fun autoSaveIfPending(context: Context) {
-        val data = PaymentNotificationService.pendingConfirmData ?: return
+        val data = PaymentNotificationService.consumePendingConfirmData() ?: return
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = (context.applicationContext as App).database
@@ -110,7 +110,6 @@ class NotifyReceiver : BroadcastReceiver() {
                 )
                 txDao.insert(tx)
                 log("自动保存成功 ✓ ${data.amountStr}元")
-                PaymentNotificationService.pendingConfirmData = null
             } catch (e: Exception) {
                 log("自动保存失败 ✗ ${e.message}")
             }

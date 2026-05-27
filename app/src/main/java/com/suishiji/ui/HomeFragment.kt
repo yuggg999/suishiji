@@ -156,17 +156,35 @@ class HomeFragment : Fragment() {
                 listAdapter.notifyItemChanged(pos)
                 if (item.id < 0) {
                     val realId = -item.id - 1000000L
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("确认删除")
-                        .setMessage("确定要删除这条固定支出吗？")
-                        .setPositiveButton("删除") { _, _ ->
-                            CoroutineScope(Dispatchers.IO).launch {
-                                (requireActivity().application as App).database.fixedExpenseDao().deleteById(realId)
-                                withContext(Dispatchers.Main) { loadPeriodData(); loadMonthData() }
+                    // 固定支出右滑：跳过本月
+                    val currentMonthKey = "%04d-%02d".format(year, month + 1)
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val dao = (requireActivity().application as App).database.fixedExpenseDao()
+                        val fe = dao.getById(realId)
+                        if (fe != null) {
+                            val isSkipped = fe.skippedMonths.split(",").contains(currentMonthKey)
+                            val label = if (isSkipped) "恢复本月" else "跳过本月"
+                            withContext(Dispatchers.Main) {
+                                AlertDialog.Builder(requireContext())
+                                    .setTitle(label)
+                                    .setMessage("确定要${label}这笔固定支出吗？")
+                                    .setPositiveButton(label) { _, _ ->
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val newSkipped = if (isSkipped) {
+                                                fe.skippedMonths.split(",").filter { it.isNotBlank() && it != currentMonthKey }.joinToString(",")
+                                            } else {
+                                                val parts = fe.skippedMonths.split(",").filter { it.isNotBlank() }
+                                                (parts + currentMonthKey).joinToString(",")
+                                            }
+                                            dao.update(fe.copy(skippedMonths = newSkipped))
+                                            withContext(Dispatchers.Main) { loadPeriodData(); loadMonthData() }
+                                        }
+                                    }
+                                    .setNegativeButton("取消", null)
+                                    .show()
                             }
                         }
-                        .setNegativeButton("取消", null)
-                        .show()
+                    }
                 } else {
                     AlertDialog.Builder(requireContext())
                         .setTitle("确认删除")
@@ -909,10 +927,11 @@ class HomeFragment : Fragment() {
                                 setOnClickListener {
                                     AlertDialog.Builder(requireContext())
                                         .setTitle("确认删除")
-                                        .setMessage("确定要删除「每月${fe.dayOfMonth}日 ¥${"%.0f".format(fe.amount)}」吗？")
+                                        .setMessage("确定要删除这条固定支出吗？")
                                         .setPositiveButton("删除") { _, _ ->
                                             CoroutineScope(Dispatchers.IO).launch {
-                                                (requireActivity().application as App).database.fixedExpenseDao().deleteById(fe.id)
+                                                val dao = (requireActivity().application as App).database.fixedExpenseDao()
+                                                dao.deleteById(fe.id)
                                                 withContext(Dispatchers.Main) {
                                                     refreshList()
                                                     loadPeriodData(); loadMonthData()
@@ -1222,36 +1241,147 @@ class HomeFragment : Fragment() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val input = requireContext().contentResolver.openInputStream(uri) ?: return@launch
-                val text = input.bufferedReader(Charsets.UTF_8).readText()
+                val bytes = input.readBytes()
                 input.close()
-                val lines = text.lines().filter { it.isNotBlank() }
+
+                if (bytes.size < 4) {
+                    withContext(Dispatchers.Main) { ToastManager.show(requireContext(), "文件为空") }
+                    return@launch
+                }
+
+                val db = (requireActivity().application as App).database
+                val dao = db.transactionDao()
+                val catDao = db.categoryDao()
+                val txns = mutableListOf<com.suishiji.db.Transaction>()
+
+                // 检测文件格式：xlsx 以 PK (ZIP) 开头
+                val isXlsx = bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
+
+                val lines: List<String>
+                if (isXlsx) {
+                    lines = parseXlsx(bytes)
+                } else {
+                    // 尝试 UTF-8，如果不是则用 GBK（支付宝CSV为GBK编码）
+                    val utf8Text = bytes.toString(Charsets.UTF_8)
+                    val hasChineseHeader = utf8Text.contains("交易时间") && utf8Text.contains("金额")
+                    if (hasChineseHeader) {
+                        lines = utf8Text.lines().filter { it.isNotBlank() }
+                    } else {
+                        val gbk = java.nio.charset.Charset.forName("GBK")
+                        lines = bytes.toString(gbk).lines().filter { it.isNotBlank() }
+                    }
+                }
+
                 if (lines.size < 2) {
                     withContext(Dispatchers.Main) { ToastManager.show(requireContext(), "文件为空") }
                     return@launch
                 }
-                val dao = (requireActivity().application as App).database.transactionDao()
-                val txns = mutableListOf<com.suishiji.db.Transaction>()
-                for (i in 1 until lines.size) {
-                    val parts = lines[i].split(",")
-                    if (parts.size >= 6) {
+
+                // 检测是否为微信/支付宝账单格式（表头可能不在第一行）
+                val headerLine = lines.firstOrNull {
+                    it.contains("交易时间") && it.contains("金额") &&
+                        (it.contains("交易类型") || it.contains("交易分类"))
+                }
+                val headerIndex = if (headerLine != null) lines.indexOf(headerLine) else -1
+                if (headerIndex >= 0 && headerLine != null) {
+                    // 微信：交易时间,交易类型,交易对方,商品,收/支,金额(元),支付方式,当前状态,交易单号,商户单号,备注
+                    // 支付宝：交易时间,交易分类,交易对方,对方账号,商品说明,收/支,金额,收/付款方式,交易状态,交易订单号,商家订单号,备注
+                    val headerParts = parseCsvLine(headerLine)
+                    val headerMap = mutableMapOf<String, Int>()
+                    headerParts.forEachIndexed { index, name -> headerMap[name.trim()] = index }
+
+                    val allCats = catDao.getByType(false)
+                    val allIncomeCats = catDao.getByType(true)
+
+                    for (i in (headerIndex + 1) until lines.size) {
+                        val parts = parseCsvLine(lines[i])
+                        if (parts.size < 6) continue
+
+                        val timeStr = headerMap["交易时间"]?.let { parts.getOrNull(it) } ?: continue
+                        val txType = headerMap["交易类型"]?.let { parts.getOrNull(it) }
+                            ?: headerMap["交易分类"]?.let { parts.getOrNull(it) } ?: ""
+                        val merchant = headerMap["交易对方"]?.let { parts.getOrNull(it) } ?: ""
+                        val direction = headerMap["收/支"]?.let { parts.getOrNull(it) } ?: ""
+                        val amountStr = headerMap["金额(元)"]?.let { parts.getOrNull(it) }
+                            ?: headerMap["金额"]?.let { parts.getOrNull(it) } ?: continue
+                        val status = headerMap["当前状态"]?.let { parts.getOrNull(it) }
+                            ?: headerMap["交易状态"]?.let { parts.getOrNull(it) } ?: ""
+                        val remark = headerMap["备注"]?.let { parts.getOrNull(it) } ?: ""
+
+                        // 跳过无效记录
+                        if (direction.isBlank() || direction == "/") continue
+                        if (status.contains("退款") || status.contains("关闭")) continue
+
+                        val amount = amountStr.replace("¥", "").toDoubleOrNull() ?: continue
+                        if (amount <= 0) continue
+
+                        // 解析时间
+                        val date = parseWechatTime(timeStr) ?: continue
+
+                        // 确定类型
+                        val type = if (direction == "收入") "income" else "expense"
+
+                        // 自动分类
+                        val category = matchCategory(merchant, txType, type == "income", allCats, allIncomeCats)
+
+                        // 构建备注：交易对方 · 交易类型
+                        val note = buildString {
+                            append(merchant)
+                            if (txType.isNotBlank() && txType != merchant) {
+                                append(" · ").append(txType)
+                            }
+                            if (remark.isNotBlank() && remark != "/") {
+                                append(" · ").append(remark)
+                            }
+                        }
+
                         txns.add(com.suishiji.db.Transaction(
-                            amount = parts[0].toDoubleOrNull() ?: continue,
-                            type = parts[1],
-                            category = parts[2],
-                            note = parts[3],
-                            date = parts[4].toLongOrNull() ?: continue,
-                            latitude = parts[5].toDoubleOrNull(),
-                            longitude = if (parts.size > 6) parts[6].toDoubleOrNull() else null,
-                            address = if (parts.size > 7) parts[7] else null
+                            amount = amount,
+                            type = type,
+                            category = category,
+                            note = note,
+                            date = date,
+                            createdAt = date
                         ))
                     }
+                } else {
+                    // 原有 CSV 格式：amount,type,category,note,date,latitude,longitude,address
+                    for (i in 1 until lines.size) {
+                        val parts = parseCsvLine(lines[i])
+                        if (parts.size >= 6) {
+                            txns.add(com.suishiji.db.Transaction(
+                                amount = parts[0].toDoubleOrNull() ?: continue,
+                                type = parts[1],
+                                category = parts[2],
+                                note = parts[3],
+                                date = parts[4].toLongOrNull() ?: continue,
+                                latitude = parts[5].toDoubleOrNull(),
+                                longitude = if (parts.size > 6) parts[6].toDoubleOrNull() else null,
+                                address = if (parts.size > 7) parts[7] else null
+                            ))
+                        }
+                    }
                 }
+
                 if (txns.isNotEmpty()) {
-                    dao.insertAll(txns)
+                    // 去重：按金额+类型+时间+备注判断
+                    val unique = txns.filter { txn ->
+                        dao.countDuplicate(txn.amount, txn.type, txn.date, txn.note) == 0
+                    }
+                    if (unique.isNotEmpty()) {
+                        dao.insertAll(unique)
+                    }
+                    val skipped = txns.size - unique.size
                     withContext(Dispatchers.Main) {
-                        ToastManager.show(requireContext(), "已导入 ${txns.size} 条记录")
+                        val msg = buildString {
+                            append("已导入 ${unique.size} 条记录")
+                            if (skipped > 0) append("，跳过 $skipped 条重复记录")
+                        }
+                        ToastManager.show(requireContext(), msg)
                         updateAll()
                     }
+                } else {
+                    withContext(Dispatchers.Main) { ToastManager.show(requireContext(), "未找到可导入的记录") }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -1259,6 +1389,220 @@ class HomeFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun parseXlsx(bytes: ByteArray): List<String> {
+        val result = mutableListOf<String>()
+        val zipEntries = mutableMapOf<String, ByteArray>()
+        val sharedStrings = mutableListOf<String>()
+
+        // 解析 ZIP
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    zipEntries[entry.name] = zis.readBytes()
+                }
+                entry = zis.nextEntry
+            }
+        }
+
+        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        factory.isNamespaceAware = false
+
+        // 解析 styles.xml，识别日期格式的 xf 索引
+        val dateXfIndices = mutableSetOf<Int>()
+        val stylesBytes = zipEntries["xl/styles.xml"]
+        if (stylesBytes != null) {
+            try {
+                val doc = factory.newDocumentBuilder().parse(stylesBytes.inputStream())
+
+                // 收集日期相关的 numFmtId（自定义格式）
+                val dateNumFmtIds = mutableSetOf<Int>()
+                val numFmtNodes = doc.getElementsByTagName("numFmt")
+                for (i in 0 until numFmtNodes.length) {
+                    val el = numFmtNodes.item(i) as org.w3c.dom.Element
+                    val code = el.getAttribute("formatCode").lowercase()
+                    if (code.contains("yy") || code.contains("mm-dd") || code.contains("hh:mm") || code.contains("m/d")) {
+                        dateNumFmtIds.add(el.getAttribute("numFmtId").toIntOrNull() ?: -1)
+                    }
+                }
+
+                // 内置日期格式 ID：14-22, 27-36, 45-47
+                val builtInDateFmtIds = setOf(
+                    14, 15, 16, 17, 18, 19, 20, 21, 22,
+                    27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                    45, 46, 47
+                )
+
+                // 解析 cellXfs，找到使用日期格式的 xf 索引
+                val cellXfsNode = doc.getElementsByTagName("cellXfs").item(0)
+                if (cellXfsNode != null) {
+                    val xfNodes = (cellXfsNode as org.w3c.dom.Element).getElementsByTagName("xf")
+                    for (i in 0 until xfNodes.length) {
+                        val el = xfNodes.item(i) as org.w3c.dom.Element
+                        val numFmtId = el.getAttribute("numFmtId").toIntOrNull() ?: 0
+                        if (numFmtId in dateNumFmtIds || numFmtId in builtInDateFmtIds) {
+                            dateXfIndices.add(i)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 解析 sharedStrings.xml
+        val ssBytes = zipEntries["xl/sharedStrings.xml"]
+        if (ssBytes != null) {
+            val doc = factory.newDocumentBuilder().parse(ssBytes.inputStream())
+            val siNodes = doc.getElementsByTagName("si")
+            for (i in 0 until siNodes.length) {
+                val si = siNodes.item(i)
+                val textParts = mutableListOf<String>()
+                val tNodes = (si as org.w3c.dom.Element).getElementsByTagName("t")
+                for (j in 0 until tNodes.length) {
+                    textParts.add(tNodes.item(j).textContent ?: "")
+                }
+                sharedStrings.add(textParts.joinToString(""))
+            }
+        }
+
+        // 解析 sheet1.xml
+        val sheetBytes = zipEntries["xl/worksheets/sheet1.xml"]
+        if (sheetBytes != null) {
+            val doc = factory.newDocumentBuilder().parse(sheetBytes.inputStream())
+            val rows = doc.getElementsByTagName("row")
+            for (r in 0 until rows.length) {
+                val row = rows.item(r) as org.w3c.dom.Element
+                val cells = row.getElementsByTagName("c")
+                val rowData = mutableListOf<String>()
+                var maxCol = 0
+                for (c in 0 until cells.length) {
+                    val cell = cells.item(c) as org.w3c.dom.Element
+                    val ref = cell.getAttribute("r") // e.g. "A1"
+                    val colIdx = ref.replace(Regex("[0-9]"), "").fold(0) { acc, ch -> acc * 26 + (ch - 'A' + 1) } - 1
+                    val t = cell.getAttribute("t") // type: s=shared string
+                    val sIdx = cell.getAttribute("s").toIntOrNull() ?: 0
+                    val vNode = cell.getElementsByTagName("v")
+                    val value = if (vNode.length > 0) vNode.item(0).textContent ?: "" else ""
+
+                    val cellValue = if (t == "s" && value.isNotEmpty()) {
+                        val idx = value.toIntOrNull() ?: 0
+                        if (idx < sharedStrings.size) sharedStrings[idx] else value
+                    } else if (sIdx in dateXfIndices && value.isNotEmpty()) {
+                        // 日期格式单元格，将 Excel 序列号转为日期字符串
+                        val serial = value.toDoubleOrNull()
+                        if (serial != null && serial > 0) excelSerialToDateTime(serial) else value
+                    } else {
+                        value
+                    }
+
+                    while (rowData.size <= colIdx) rowData.add("")
+                    rowData[colIdx] = cellValue
+                    if (colIdx > maxCol) maxCol = colIdx
+                }
+                if (rowData.isNotEmpty()) {
+                    result.add(rowData.joinToString(","))
+                }
+            }
+        }
+
+        return result
+    }
+
+    private fun excelSerialToDateTime(serial: Double): String {
+        val cal = java.util.GregorianCalendar(java.util.Locale.US)
+        cal.set(1899, java.util.Calendar.DECEMBER, 30, 0, 0, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.add(java.util.Calendar.DAY_OF_MONTH, serial.toInt())
+        val millis = ((serial - serial.toInt()) * 24.0 * 60 * 60 * 1000).toLong()
+        cal.add(java.util.Calendar.MILLISECOND, millis.toInt())
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+        return sdf.format(cal.time)
+    }
+
+    private fun parseWechatTime(timeStr: String): Long? {
+        return try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+            sdf.parse(timeStr)?.time
+        } catch (e: Exception) {
+            try {
+                val sdf = java.text.SimpleDateFormat("yyyy/M/d HH:mm:ss", java.util.Locale.CHINA)
+                sdf.parse(timeStr)?.time
+            } catch (e2: Exception) {
+                null
+            }
+        }
+    }
+
+    private fun matchCategory(merchant: String, txType: String, isIncome: Boolean, expenseCats: List<com.suishiji.db.Category>, incomeCats: List<com.suishiji.db.Category>): String {
+        // 支付宝交易分类映射到应用分类
+        if (txType.isNotBlank()) {
+            val mapped = mapAlipayCategory(txType, isIncome)
+            if (mapped != null) return mapped
+        }
+        if (merchant.isBlank()) return if (isIncome) "其它收入" else "其它"
+        val cats = if (isIncome) incomeCats else expenseCats
+        for (cat in cats) {
+            if (cat.keywords.isNotBlank()) {
+                for (kw in cat.keywords.split(",")) {
+                    if (kw.isNotBlank() && merchant.contains(kw, ignoreCase = true)) {
+                        return cat.name
+                    }
+                }
+            }
+        }
+        return if (isIncome) "其它收入" else "其它"
+    }
+
+    private fun mapAlipayCategory(txType: String, isIncome: Boolean): String? {
+        val t = txType.trim()
+        if (isIncome) {
+            return when {
+                t.contains("工资") || t.contains("劳务") -> "工资"
+                t.contains("兼职") || t.contains("副业") -> "兼职"
+                t.contains("理财") || t.contains("投资") -> "理财"
+                t.contains("转账") || t.contains("红包") -> "其它收入"
+                else -> null
+            }
+        } else {
+            return when {
+                t.contains("餐饮") || t.contains("美食") -> "食物"
+                t.contains("日用") || t.contains("百货") || t.contains("家居") || t.contains("家装") -> "生活"
+                t.contains("交通") || t.contains("出行") -> "交通"
+                t.contains("住宿") || t.contains("酒店") -> "住宿"
+                t.contains("休闲") || t.contains("娱乐") || t.contains("文化") -> "娱乐"
+                t.contains("转账") || t.contains("红包") || t.contains("充值") || t.contains("缴费") || t.contains("投资") || t.contains("理财") -> "其它"
+                else -> null
+            }
+        }
+    }
+
+    private fun parseCsvLine(line: String): List<String> {
+        val result = mutableListOf<String>()
+        var current = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            when {
+                c == '"' -> {
+                    if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                        current.append('"')
+                        i++
+                    } else {
+                        inQuotes = !inQuotes
+                    }
+                }
+                c == ',' && !inQuotes -> {
+                    result.add(current.toString())
+                    current = StringBuilder()
+                }
+                else -> current.append(c)
+            }
+            i++
+        }
+        result.add(current.toString())
+        return result
     }
 
     private fun setPeriod(mode: Int) {
@@ -1306,23 +1650,32 @@ class HomeFragment : Fragment() {
                 dayCal.get(Calendar.DAY_OF_MONTH).toLong()
             }.toSet()
 
-            val feDates = fixedExpenses.map { it.dayOfMonth.toLong() }.toSet()
+            val feDates = fixedExpenses
+                .filter { !it.skippedMonths.split(",").contains("%04d-%02d".format(year, month + 1)) }
+                .map { it.dayOfMonth.toLong() }.toSet()
 
             // Build daily expense map (day of month -> total)
             val dailyMap = mutableMapOf<Int, Double>()
             dailySums.forEach { ds ->
                 dayCal.timeInMillis = ds.date
-                dailyMap[dayCal.get(Calendar.DAY_OF_MONTH)] = ds.total
+                val day = dayCal.get(Calendar.DAY_OF_MONTH)
+                dailyMap[day] = (dailyMap[day] ?: 0.0) + ds.total
             }
             // Add fixed expenses to daily map
+            val currentMonthKeyForMap = "%04d-%02d".format(year, month + 1)
             fixedExpenses.forEach { fe ->
-                dailyMap[fe.dayOfMonth] = (dailyMap[fe.dayOfMonth] ?: 0.0) + fe.amount
+                if (!fe.skippedMonths.split(",").contains(currentMonthKeyForMap)) {
+                    dailyMap[fe.dayOfMonth] = (dailyMap[fe.dayOfMonth] ?: 0.0) + fe.amount
+                }
             }
 
-            val totalExpense = expense + fixedExpenses.sumOf { it.amount }
+            val totalExpense = expense + fixedExpenses
+                .filter { !it.skippedMonths.split(",").contains(currentMonthKeyForMap) }
+                .sumOf { it.amount }
 
             withContext(Dispatchers.Main) {
                 if (_binding == null) return@withContext
+                binding.summaryCard.visibility = View.VISIBLE
                 binding.tvExpense.text = "¥%.2f".format(totalExpense)
                 binding.tvIncome.text = "¥%.2f".format(income)
                 binding.tvBalance.text = "¥%.2f".format(income - totalExpense)
@@ -1348,8 +1701,10 @@ class HomeFragment : Fragment() {
             val fixedExpenses = feDao.getAll()
 
             val cal = Calendar.getInstance()
+            val currentMonthKey = "%04d-%02d".format(year, month + 1)
             var feExpense = 0.0
             fixedExpenses.forEach { fe ->
+                if (fe.skippedMonths.split(",").contains(currentMonthKey)) return@forEach
                 cal.set(year, month, fe.dayOfMonth, 12, 0, 0)
                 cal.set(Calendar.MILLISECOND, 0)
                 val feTime = cal.timeInMillis
@@ -1380,33 +1735,7 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun getPeriodRange(): Triple<Long, Long, String> {
-        val cal = Calendar.getInstance()
-        return when (periodMode) {
-            0 -> {
-                cal.set(year, month, selectedDay, 0, 0, 0)
-                cal.set(Calendar.MILLISECOND, 0)
-                val start = cal.timeInMillis
-                cal.add(Calendar.DAY_OF_MONTH, 1)
-                Triple(start, cal.timeInMillis, dayFormat.format(java.util.Date(start)))
-            }
-            1 -> {
-                cal.set(year, month, 1, 0, 0, 0)
-                cal.set(Calendar.MILLISECOND, 0)
-                val start = cal.timeInMillis
-                cal.add(Calendar.MONTH, 1)
-                Triple(start, cal.timeInMillis, monthFormat.format(java.util.Date(start)))
-            }
-            2 -> {
-                cal.set(year, 0, 1, 0, 0, 0)
-                cal.set(Calendar.MILLISECOND, 0)
-                val start = cal.timeInMillis
-                cal.add(Calendar.YEAR, 1)
-                Triple(start, cal.timeInMillis, "${year}年")
-            }
-            else -> getPeriodRange()
-        }
-    }
+    private fun getPeriodRange(): Triple<Long, Long, String> = getPeriodRangeByMode(periodMode)
 
     private fun getMonthRange(): Pair<Long, Long> {
         val cal = Calendar.getInstance()
@@ -1466,7 +1795,7 @@ class HomeFragment : Fragment() {
         val isCurrentMonth = today.get(Calendar.YEAR) == year && today.get(Calendar.MONTH) == month
         val todayDay = today.get(Calendar.DAY_OF_MONTH)
 
-        val avgDaily = if (dailyExpenseMap.isNotEmpty()) dailyExpenseMap.values.sum() / dailyExpenseMap.size else 0.0
+        val avgDaily = if (dailyExpenseMap.isNotEmpty()) dailyExpenseMap.values.sum() / daysInMonth else 0.0
 
         for (i in 0 until 42) {
             val dayNum = i - startOffset + 1
@@ -1598,7 +1927,7 @@ class HomeFragment : Fragment() {
                 text = "🎂"; textSize = 8f; gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(dp(14), dp(10)).apply { topMargin = dp(1) }
             })
-        } else if (transactionDates.contains(day.toLong())) {
+        } else if (dailyExpenseMap.containsKey(day)) {
             val daySpending = dailyExpenseMap[day] ?: 0.0
             val dotColor = if (daySpending > avgDaily) ContextCompat.getColor(requireContext(), R.color.calendar_dot_high) else ContextCompat.getColor(requireContext(), R.color.calendar_dot_low)
             layout.addView(View(requireContext()).apply {
@@ -1730,8 +2059,8 @@ class HomeFragment : Fragment() {
         val remain = budget - monthExpense
         val percent = (monthExpense / budget * 100).toInt().coerceIn(0, 100)
 
-        binding.tvBudgetRemain.text = if (remain >= 0) "剩余¥%.0f".format(remain) else "超支¥%.0f".format(-remain)
-        binding.tvBudgetRemain.setTextColor(requireContext().getColor(if (remain >= 0) R.color.income else R.color.expense))
+        binding.tvBudgetRemainCard.text = if (remain >= 0) "剩余¥%.0f".format(remain) else "超支¥%.0f".format(-remain)
+        binding.tvBudgetRemainCard.setTextColor(requireContext().getColor(if (remain >= 0) R.color.income else R.color.expense))
         binding.tvBudgetSpent.text = "已用¥%.0f".format(monthExpense)
         binding.tvBudgetTotal.text = "预算¥%.0f".format(budget)
 

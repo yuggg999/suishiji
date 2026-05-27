@@ -99,6 +99,7 @@
 
             <!-- Summary Card -->
             <LinearLayout
+                android:id="@+id/summary_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -108,39 +109,7 @@
                 android:gravity="center"
                 android:background="@drawable/bg_card"
                 android:padding="16dp"
-                android:visibility="gone"
                 android:elevation="2dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="月度预算"
-                        android:textSize="15sp"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tv_budget_remain"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textSize="14sp"
-                        android:textColor="@color/income" />
-                </LinearLayout>
-
-                <View
-                    android:layout_width="1dp"
-                    android:layout_height="40dp"
-                    android:background="@color/border"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginEnd="12dp" />
 
                 <LinearLayout
                     android:id="@+id/expense_section"
@@ -155,8 +124,7 @@
                         android:layout_height="wrap_content"
                         android:text="总支出"
                         android:textSize="11sp"
-                        android:textColor="@color/text_disabled"
-                        />
+                        android:textColor="@color/text_disabled" />
                     <TextView
                         android:id="@+id/tv_expense"
                         android:layout_width="wrap_content"
@@ -165,8 +133,7 @@
                         android:textSize="22sp"
                         android:textStyle="bold"
                         android:textColor="@color/expense"
-                        android:layout_marginTop="6dp"
-                        />
+                        android:layout_marginTop="6dp" />
                 </LinearLayout>
 
                 <View
@@ -189,8 +156,7 @@
                         android:layout_height="wrap_content"
                         android:text="总收入"
                         android:textSize="11sp"
-                        android:textColor="@color/text_disabled"
-                        />
+                        android:textColor="@color/text_disabled" />
                     <TextView
                         android:id="@+id/tv_income"
                         android:layout_width="wrap_content"
@@ -199,8 +165,7 @@
                         android:textSize="22sp"
                         android:textStyle="bold"
                         android:textColor="@color/income"
-                        android:layout_marginTop="6dp"
-                        />
+                        android:layout_marginTop="6dp" />
                 </LinearLayout>
 
                 <View
@@ -221,8 +186,7 @@
                         android:layout_height="wrap_content"
                         android:text="结余"
                         android:textSize="11sp"
-                        android:textColor="@color/text_disabled"
-                        />
+                        android:textColor="@color/text_disabled" />
                     <TextView
                         android:id="@+id/tv_balance"
                         android:layout_width="wrap_content"
@@ -231,8 +195,7 @@
                         android:textSize="22sp"
                         android:textStyle="bold"
                         android:textColor="@color/primary"
-                        android:layout_marginTop="6dp"
-                        />
+                        android:layout_marginTop="6dp" />
                 </LinearLayout>
             </LinearLayout>
 

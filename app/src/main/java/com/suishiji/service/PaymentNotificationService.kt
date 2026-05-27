@@ -51,15 +51,8 @@ class PaymentNotificationService : AccessibilityService() {
 
         val now = System.currentTimeMillis()
 
-        when (event.eventType) {
-            // 支付成功页面识别
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                handleWindowChanged(pkg, now)
-            }
-            // 退款兜底：页面内容变化时检测
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                handleContentChanged(pkg, now)
-            }
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            handleWindowChanged(pkg, now)
         }
     }
 
@@ -97,7 +90,9 @@ class PaymentNotificationService : AccessibilityService() {
 
         val amount = extractAmount(allTexts) ?: return
         val merchant = extractMerchant(allTexts) ?: ""
-        processPayment(amount, merchant, "支付宝", now)
+        val paymentMethod = extractPaymentMethod(allTexts) ?: ""
+        val discount = extractDiscount(allTexts) ?: ""
+        processPayment(amount, merchant, "支付宝", now, paymentMethod, discount)
     }
 
     private fun handleWechatPay(allTexts: List<String>, pageText: String, now: Long) {
@@ -112,20 +107,17 @@ class PaymentNotificationService : AccessibilityService() {
 
         val amount = extractAmount(allTexts) ?: return
         val merchant = extractMerchant(allTexts) ?: ""
-        processPayment(amount, merchant, "微信", now)
-    }
-
-    // ==================== 内容变化（无障碍服务不再处理退款，由 NotificationListenerService 处理） ====================
-
-    private fun handleContentChanged(pkg: String, now: Long) {
-        // 退款识别已移至 RefundNotificationListener
+        val paymentMethod = extractPaymentMethod(allTexts) ?: ""
+        val discount = extractDiscount(allTexts) ?: ""
+        processPayment(amount, merchant, "微信", now, paymentMethod, discount)
     }
 
     // ==================== 支付处理 ====================
 
-    private fun processPayment(amountStr: String, merchant: String, source: String, now: Long) {
+    private fun processPayment(amountStr: String, merchant: String, source: String, now: Long,
+                               paymentMethod: String = "", discount: String = "") {
         val amount = amountStr.toDoubleOrNull() ?: return
-        log("解析结果 → $source ${amountStr}元 · $merchant")
+        log("解析结果 → $source ${amountStr}元 · $merchant · 支付方式:$paymentMethod · 折扣:$discount")
 
         if (amountStr == lastAmount && now - lastTime < 60000) {
             log("检测到相同金额 ${amountStr}元，弹出确认通知")
@@ -167,7 +159,9 @@ class PaymentNotificationService : AccessibilityService() {
                         date = now,
                         latitude = location?.latitude,
                         longitude = location?.longitude,
-                        address = location?.address
+                        address = location?.address,
+                        paymentMethod = paymentMethod,
+                        discount = discount
                     )
 
                     withContext(Dispatchers.Main) {
@@ -214,19 +208,26 @@ class PaymentNotificationService : AccessibilityService() {
 
                     // 3秒后自动保存
                     kotlinx.coroutines.delay(3000)
-                    val data = pendingConfirmData ?: return@launch
+                    val data = consumePendingConfirmData() ?: return@launch
+
+                    // 构建备注：商家 · 支付方式 · 原价/折扣信息
+                    val noteParts = mutableListOf<String>()
+                    if (data.merchant.isNotBlank()) noteParts.add(data.merchant)
+                    if (data.paymentMethod.isNotBlank()) noteParts.add(data.paymentMethod)
+                    if (data.discount.isNotBlank()) noteParts.add(data.discount)
+                    val note = noteParts.joinToString(" · ").ifBlank { data.source }
+
                     val tx = com.suishiji.db.Transaction(
                         amount = data.amount,
                         type = data.type,
                         category = data.category,
-                        note = if (data.merchant.isNotBlank()) data.merchant else data.source,
+                        note = note,
                         date = data.date,
                         latitude = data.latitude,
                         longitude = data.longitude,
                         address = data.address
                     )
                     lastSavedId = db.transactionDao().insert(tx)
-                    pendingConfirmData = null
                     log("自动保存成功 ✓ ${data.amountStr}元")
                 } catch (e: Exception) {
                     log("支付识别失败 ✗ ${e.message}")
@@ -305,6 +306,7 @@ class PaymentNotificationService : AccessibilityService() {
             "完成", "返回", "微信支付", "支付宝", "交易", "账单", "详情", "付款成功",
             "优惠", "红包", "立减", "折扣", "已省", "已优惠",
             "转账成功", "已转账", "对方已收款", "确认收款")
+        val excludePatterns = listOf("确认收款", "待.*确认", "已收钱", "已转账", "对方已收")
         for (text in texts) {
             val cleaned = text.trim()
             if (cleaned.length in 2..20
@@ -313,11 +315,121 @@ class PaymentNotificationService : AccessibilityService() {
                 && !cleaned.contains("支付成功")
                 && !cleaned.contains("支付完成")
                 && !cleaned.contains("付款成功")
-                && !cleaned.contains("退款")) {
+                && !cleaned.contains("退款")
+                && !excludePatterns.any { cleaned.contains(Regex(it)) }) {
                 return cleaned
             }
         }
         return null
+    }
+
+    // ==================== 支付方式提取 ====================
+
+    private fun extractPaymentMethod(texts: List<String>): String? {
+        val methods = listOf("花呗", "余额宝", "银行卡", "信用卡", "借记卡", "零钱", "零钱通", "亲属卡")
+        for (text in texts) {
+            val cleaned = text.trim()
+            for (method in methods) {
+                if (cleaned == method) return method
+            }
+        }
+        // 兜底：匹配"交易方式"后面的文本
+        for (i in texts.indices) {
+            if (texts[i].trim() == "交易方式" && i + 1 < texts.size) {
+                val next = texts[i + 1].trim()
+                if (next.length in 1..10 && !next.contains("¥") && !next.contains("￥")) {
+                    return next
+                }
+            }
+        }
+        return null
+    }
+
+    // ==================== 折扣信息提取 ====================
+
+    private fun extractDiscount(texts: List<String>): String? {
+        val discountKw = listOf("立减", "优惠", "红包", "折扣", "满减", "减免", "抵扣")
+        val symbolRegex = Regex("""[¥￥]\s*(\d+\.?\d*)""")
+        val yuanRegex = Regex("""(\d+\.?\d*)\s*元""")
+
+        var discountText: String? = null
+        var discountAmount: Double? = null
+        var discountIdx = -1
+
+        for (i in texts.indices) {
+            if (discountKw.any { texts[i].contains(it) }) {
+                // 先在当前文本找金额
+                val match = symbolRegex.find(texts[i])
+                if (match != null) {
+                    val amt = match.groupValues[1].toDoubleOrNull()
+                    if (amt != null && amt > 0) {
+                        discountText = texts[i].trim()
+                        discountAmount = amt
+                        discountIdx = i
+                        break
+                    }
+                }
+                val yuanMatch = yuanRegex.find(texts[i])
+                if (yuanMatch != null) {
+                    val amt = yuanMatch.groupValues[1].toDoubleOrNull()
+                    if (amt != null && amt > 0) {
+                        discountText = texts[i].trim()
+                        discountAmount = amt
+                        discountIdx = i
+                        break
+                    }
+                }
+                // 当前文本没有金额，向后找相邻节点（最多2个）
+                for (j in (i + 1) until minOf(i + 3, texts.size)) {
+                    val m2 = symbolRegex.find(texts[j])
+                    if (m2 != null) {
+                        val amt = m2.groupValues[1].toDoubleOrNull()
+                        if (amt != null && amt > 0) {
+                            discountText = texts[i].trim()
+                            discountAmount = amt
+                            discountIdx = i
+                            break
+                        }
+                    }
+                    val y2 = yuanRegex.find(texts[j])
+                    if (y2 != null) {
+                        val amt = y2.groupValues[1].toDoubleOrNull()
+                        if (amt != null && amt > 0) {
+                            discountText = texts[i].trim()
+                            discountAmount = amt
+                            discountIdx = i
+                            break
+                        }
+                    }
+                }
+                if (discountText != null) break
+            }
+        }
+
+        if (discountText == null || discountAmount == null) return null
+
+        // 找原价（折扣行之前的 ¥ 金额）
+        var originalPrice: String? = null
+        if (discountIdx > 0) {
+            for (i in (discountIdx - 1) downTo maxOf(0, discountIdx - 3)) {
+                val match = symbolRegex.find(texts[i])
+                if (match != null) {
+                    val price = match.groupValues[1].toDoubleOrNull()
+                    if (price != null && price > discountAmount) {
+                        originalPrice = "原价¥${match.groupValues[1]}"
+                        break
+                    }
+                }
+            }
+        }
+
+        val formattedDiscount = "$discountText-¥${if (discountAmount % 1 == 0.0) discountAmount.toInt() else discountAmount}"
+
+        return if (originalPrice != null) {
+            "$originalPrice $formattedDiscount"
+        } else {
+            formattedDiscount
+        }
     }
 
     // ==================== 节点树工具 ====================
@@ -427,14 +539,29 @@ class PaymentNotificationService : AccessibilityService() {
         val date: Long,
         val latitude: Double?,
         val longitude: Double?,
-        val address: String?
+        val address: String?,
+        val paymentMethod: String = "",
+        val discount: String = "",
+        val originalPrice: String = ""
     )
 
     companion object {
         var instance: PaymentNotificationService? = null
             private set
         var pendingConfirmData: ConfirmData? = null
+            @Synchronized get
+            @Synchronized set
         var lastSavedId: Long = 0
+            @Synchronized get
+            @Synchronized set
+
+        @Synchronized
+        fun consumePendingConfirmData(): ConfirmData? {
+            val data = pendingConfirmData
+            pendingConfirmData = null
+            return data
+        }
+
         private const val BACKGROUND_CHANNEL_ID = "suishiji_background_service"
         const val CONFIRM_CHANNEL_ID = "suishiji_confirm_notification"
         const val NOTIFICATION_ID = 1001

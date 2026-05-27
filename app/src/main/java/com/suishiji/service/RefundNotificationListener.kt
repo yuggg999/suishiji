@@ -157,7 +157,7 @@ class RefundNotificationListener : NotificationListenerService() {
 
                 delay(3000)
 
-                val data = PaymentNotificationService.pendingConfirmData
+                val data = PaymentNotificationService.consumePendingConfirmData()
                 if (data == null) {
                     log("用户已操作，跳过自动保存")
                     locJob.cancel()
@@ -187,7 +187,6 @@ class RefundNotificationListener : NotificationListenerService() {
                     address = loc?.address
                 )
                 val refundId = txDao.insert(refund)
-                PaymentNotificationService.pendingConfirmData = null
                 PaymentNotificationService.lastSavedId = refundId
                 log("支付宝退款已自动记录 ✓ ${amount}元")
             } catch (e: Exception) {
@@ -216,7 +215,7 @@ class RefundNotificationListener : NotificationListenerService() {
                 }
 
                 delay(3000)
-                val data = PaymentNotificationService.pendingConfirmData
+                val data = PaymentNotificationService.consumePendingConfirmData()
                 if (data == null) {
                     log("用户已操作，跳过自动保存")
                     locJob.cancel()
@@ -237,7 +236,6 @@ class RefundNotificationListener : NotificationListenerService() {
                     address = loc?.address
                 )
                 val refundId = db.transactionDao().insert(refund)
-                PaymentNotificationService.pendingConfirmData = null
                 PaymentNotificationService.lastSavedId = refundId
                 log("微信退款已自动记录 ✓ ${amount}元")
             } catch (e: Exception) {
@@ -316,7 +314,7 @@ class RefundNotificationListener : NotificationListenerService() {
 
                 delay(3000)
 
-                val data = PaymentNotificationService.pendingConfirmData
+                val data = PaymentNotificationService.consumePendingConfirmData()
                 if (data == null) {
                     log("用户已操作，跳过自动保存")
                     locJob.cancel()
@@ -327,11 +325,19 @@ class RefundNotificationListener : NotificationListenerService() {
                 val loc = try { locJob.await() } catch (_: Exception) { null }
 
                 val db = (applicationContext as App).database
+
+                // 构建备注：商家 · 支付方式 · 折扣信息
+                val noteParts = mutableListOf<String>()
+                if (data.merchant.isNotBlank()) noteParts.add(data.merchant)
+                if (data.paymentMethod.isNotBlank()) noteParts.add(data.paymentMethod)
+                if (data.discount.isNotBlank()) noteParts.add(data.discount)
+                val note = noteParts.joinToString(" · ").ifBlank { data.source }
+
                 val tx = com.suishiji.db.Transaction(
                     amount = data.amount,
                     type = data.type,
                     category = data.category,
-                    note = data.source,
+                    note = note,
                     date = data.date,
                     latitude = loc?.latitude,
                     longitude = loc?.longitude,
@@ -339,7 +345,6 @@ class RefundNotificationListener : NotificationListenerService() {
                 )
                 val id = db.transactionDao().insert(tx)
                 PaymentNotificationService.lastSavedId = id
-                PaymentNotificationService.pendingConfirmData = null
                 log("自动保存成功（通知监听） ✓ ${amountStr}元")
             } catch (e: Exception) {
                 log("自动保存失败（通知监听） ✗ ${e.message}")

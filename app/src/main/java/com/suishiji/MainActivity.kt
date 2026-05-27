@@ -40,7 +40,6 @@ class MainActivity : AppCompatActivity() {
         checkAccessibilityPermission()
         checkNotificationListenerPermission()
         requestLocationPermissions()
-        permissionGuide.checkAndGuide()
         handleNotificationIntent(intent)
     }
 
@@ -101,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             // 用户点击了通知，取消自动保存
-            com.suishiji.service.PaymentNotificationService.pendingConfirmData = null
+            com.suishiji.service.PaymentNotificationService.consumePendingConfirmData()
 
             // 优先检查自动保存的 ID（解决竞态问题）
             var editId = com.suishiji.service.PaymentNotificationService.lastSavedId

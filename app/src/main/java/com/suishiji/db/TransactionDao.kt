@@ -64,6 +64,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE type = 'expense' AND amount = :amount AND note LIKE '%' || :source || '%' ORDER BY date DESC LIMIT 1")
     suspend fun findExpenseByAmount(amount: Double, source: String): Transaction?
 
+    @Query("SELECT COUNT(*) FROM transactions WHERE amount = :amount AND type = :type AND date = :date AND note = :note")
+    suspend fun countDuplicate(amount: Double, type: String, date: Long, note: String): Int
+
     @Query("SELECT date, SUM(amount) as total FROM transactions WHERE type = 'expense' AND date >= :start AND date < :end GROUP BY date")
     suspend fun getDailyExpenseSums(start: Long, end: Long): List<DailyExpenseSum>
 }
@@ -92,9 +95,6 @@ interface CategoryDao {
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun count(): Int
 
-    @Query("SELECT * FROM categories WHERE keywords != '' AND :text LIKE '%' || keywords || '%'")
-    suspend fun findByKeyword(text: String): List<Category>
-
     @Update
     suspend fun update(category: Category)
 
@@ -118,4 +118,7 @@ interface FixedExpenseDao {
 
     @Query("DELETE FROM fixed_expenses WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("SELECT * FROM fixed_expenses WHERE id = :id")
+    suspend fun getById(id: Long): FixedExpense?
 }

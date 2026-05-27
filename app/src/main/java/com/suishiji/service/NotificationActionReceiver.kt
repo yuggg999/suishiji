@@ -19,7 +19,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val action = intent.action
         log("收到操作 → $action")
 
-        val data = PaymentNotificationService.pendingConfirmData
+        val data = PaymentNotificationService.consumePendingConfirmData()
 
         when (action) {
             ACTION_SAVE -> {
@@ -46,7 +46,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
             }
         }
 
-        PaymentNotificationService.pendingConfirmData = null
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(PaymentNotificationService.DUPLICATE_NOTIFICATION_ID)
         manager.cancel(PaymentNotificationService.REFUND_NOTIFICATION_ID)

@@ -32,5 +32,6 @@ data class FixedExpense(
     val dayOfMonth: Int,
     val amount: Double,
     val category: String,
-    val note: String = ""
+    val note: String = "",
+    val skippedMonths: String = ""
 )
